@@ -1,0 +1,122 @@
+{
+    "arduinos": {
+        "1": "192.168.150.45",
+        "2": "192.168.150.45",
+        "3": "192.168.150.45",
+        "4": "192.168.150.45",
+        "5": "",
+        "6": "",
+        "7": "",
+        "8": ""
+    },
+    "portas_arduino": {
+        "1": [
+            true,
+            false,
+            false,
+            false
+        ],
+        "2": [
+            false,
+            true,
+            false,
+            false
+        ],
+        "3": [
+            false,
+            false,
+            true,
+            false
+        ],
+        "4": [
+            false,
+            false,
+            false,
+            true
+        ],
+        "5": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "6": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "7": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "8": [
+            false,
+            false,
+            false,
+            false
+        ]
+    },
+    "panicos": {
+        "1": "192.168.150.45",
+        "2": "",
+        "3": "",
+        "4": "",
+        "5": "",
+        "6": "",
+        "7": "",
+        "8": ""
+    },
+    "portas_panico": {
+        "1": [
+            true,
+            true,
+            true,
+            true
+        ],
+        "2": [
+            true,
+            true,
+            true,
+            true
+        ],
+        "3": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "4": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "5": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "6": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "7": [
+            false,
+            false,
+            false,
+            false
+        ],
+        "8": [
+            false,
+            false,
+            false,
+            false
+        ]
+    }
+}
