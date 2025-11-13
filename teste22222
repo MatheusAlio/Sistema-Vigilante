@@ -1,0 +1,718 @@
+import tkinter as tk
+from tkinter import messagebox
+from PIL import Image, ImageTk, ImageDraw
+import cv2
+import threading
+import socket
+import subprocess
+import queue
+import time
+import requests
+import json
+import os
+
+# ==============================
+# CONFIGURAÇÃO DE ARDUINOS E PÂNICO
+# ==============================
+CONFIG_FILE = "config.json"
+
+CONFIG_PADRAO = {
+    "arduinos": {str(i): f"192.168.150.{40+i}" for i in range(1, 9)},
+    "portas_arduino": {str(i): [True, True, True, True] for i in range(1, 9)},
+    "panicos": {str(i): f"192.168.150.{50+i}" for i in range(1, 9)}
+}
+
+def carregar_config():
+    if not os.path.exists(CONFIG_FILE):
+        salvar_config(CONFIG_PADRAO)
+        return CONFIG_PADRAO
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            conteudo = f.read().strip()
+            if not conteudo:
+                raise ValueError("Arquivo vazio")
+            return json.loads(conteudo)
+    except Exception as e:
+        print(f"[ERRO] Falha ao carregar config.json: {e}")
+        salvar_config(CONFIG_PADRAO)
+        return CONFIG_PADRAO
+
+def salvar_config(novo_config):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(novo_config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERRO] Falha ao salvar config.json: {e}")
+
+CONFIG = carregar_config()
+
+# ==============================
+# FUNÇÕES AUXILIARES
+# ==============================
+def aplicar_hover(botao, cor_normal, cor_hover):
+    botao.bind("<Enter>", lambda e: botao.config(bg=cor_hover))
+    botao.bind("<Leave>", lambda e: botao.config(bg=cor_normal))
+
+def pegar_ip_local():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "192.168.0.100"
+
+def testar_ping(ip):
+    try:
+        resultado = subprocess.run(
+            ["ping", "-n" if subprocess.os.name == "nt" else "-c", "1", ip],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        return resultado.returncode == 0
+    except Exception:
+        return False
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import tkinter as tk
+from tkinter import messagebox
+import requests
+import json
+import os
+
+CONFIG_FILE = "config.json"
+
+# -------------------------------
+# Configuração padrão
+# -------------------------------
+CONFIG_PADRAO = {
+    "arduinos": {str(i): f"192.168.150.{40+i}" for i in range(1, 9)},
+    "portas_arduino": {str(i): [True, True, True, True] for i in range(1, 9)},
+    "panicos": {str(i): f"192.168.150.{50+i}" for i in range(1, 9)},
+    "portas_panico": {str(i): [True, True, True, True] for i in range(1, 9)}
+}
+
+# -------------------------------
+# Funções de arquivo
+# -------------------------------
+def carregar_config():
+    if not os.path.exists(CONFIG_FILE):
+        salvar_config(CONFIG_PADRAO)
+        return CONFIG_PADRAO
+    try:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+            conteudo = f.read().strip()
+            if not conteudo:
+                raise ValueError("Arquivo vazio")
+            return json.loads(conteudo)
+    except Exception as e:
+        print(f"[ERRO] Falha ao carregar config.json: {e}")
+        salvar_config(CONFIG_PADRAO)
+        return CONFIG_PADRAO
+
+def salvar_config(novo_config):
+    try:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(novo_config, f, indent=4, ensure_ascii=False)
+    except Exception as e:
+        print(f"[ERRO] Falha ao salvar config.json: {e}")
+
+CONFIG = carregar_config()
+
+# -------------------------------
+# GUI
+# -------------------------------
+class ConfiguracoesGerais(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title("Configurações Arduino e Pânico")
+        self.configure(bg="#2C2F44")
+        self.resizable(True, True)
+
+        # Estruturas de armazenamento
+        self.arduinos = {}      # {i: {"entry": Entry, "portas": [IntVar,...]}}
+        self.panicos = {}
+        self.panicos_geral = {}
+
+        # Cabeçalho
+        tk.Label(self, text="Configurações de Arduinos e Pânicos",
+                 bg="#2C2F44", fg="white", font=("Arial", 14, "bold")).pack(pady=10)
+
+        # Frame principal para blocos
+        main_frame = tk.Frame(self, bg="#2C2F44")
+        main_frame.pack(padx=10, pady=10)
+
+        # Criar blocos 4x2 (Arduino + Pânico)
+        for idx in range(8):
+            linha = idx // 4
+            coluna = idx % 4
+            self.criar_bloco(main_frame, idx+1, linha, coluna)
+
+        # --- BLOCO DE PÂNICO GERAL ---
+        self.criar_bloco_panico_geral()
+
+        # Botões
+        btn_frame = tk.Frame(self, bg="#2C2F44")
+        btn_frame.pack(pady=10)
+        tk.Button(btn_frame, text="Testar Conexões", bg="#2196F3", fg="white", width=18,
+                  command=self.testar_conexoes).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Salvar Configurações", bg="#4CAF50", fg="white", width=22,
+                  command=self.salvar_tudo).pack(side="left", padx=10)
+        tk.Button(btn_frame, text="Fechar", bg="#F44336", fg="white", width=15,
+                  command=self.destroy).pack(side="left", padx=10)
+
+    # ===============================
+    # Criar bloco individual Arduino+Pânico
+    # ===============================
+    def criar_bloco(self, parent, i, linha, coluna):
+        bloco = tk.Frame(parent, bg="#2C2F44", bd=2, relief="groove", padx=5, pady=5)
+        bloco.grid(row=linha, column=coluna, padx=5, pady=5, sticky="n")
+
+        # --- Arduino ---
+        tk.Label(bloco, text=f"Arduino {i}", bg="#2C2F44", fg="white", font=("Arial", 12, "bold")).pack(anchor="w", pady=2)
+        tk.Label(bloco, text="IP Arduino:", bg="#2C2F44", fg="white").pack(anchor="w")
+        entry_a = tk.Entry(bloco, width=15)
+        entry_a.insert(0, CONFIG["arduinos"].get(str(i), ""))
+        entry_a.pack(anchor="w", pady=2)
+
+        tk.Label(bloco, text="Portas Ativas:", bg="#2C2F44", fg="white").pack(anchor="w")
+        frame_portas = tk.Frame(bloco, bg="#2C2F44")
+        frame_portas.pack(anchor="w", pady=2)
+
+        portas_config = CONFIG.get("portas_arduino", {}).get(str(i), [True]*4)
+        check_vars = []
+        for p in range(4):
+            var = tk.IntVar(value=1 if portas_config[p] else 0)
+            cb = tk.Checkbutton(frame_portas, text=f"P{p+1}", variable=var,
+                                bg="#2C2F44", fg="white", selectcolor="#4CAF50",
+                                activebackground="#2C2F44", activeforeground="white")
+            cb.pack(side="left", padx=2)
+            check_vars.append(var)
+
+        self.arduinos[i] = {"entry": entry_a, "portas": check_vars}
+
+        # --- Pânico ---
+        tk.Label(bloco, text=f"Pânico {i}", bg="#2C2F44", fg="white", font=("Arial", 12, "bold")).pack(anchor="w", pady=(10,2))
+        tk.Label(bloco, text="IP Pânico:", bg="#2C2F44", fg="white").pack(anchor="w")
+        entry_p = tk.Entry(bloco, width=15)
+        entry_p.insert(0, CONFIG["panicos"].get(str(i), ""))
+        entry_p.pack(anchor="w", pady=2)
+
+        portas_panico_config = CONFIG.get("portas_panico", {}).get(str(i), [True]*4)
+        check_vars_p = []
+        tk.Label(bloco, text="Portas Ativas:", bg="#2C2F44", fg="white").pack(anchor="w")
+        frame_portas_p = tk.Frame(bloco, bg="#2C2F44")
+        frame_portas_p.pack(anchor="w", pady=2)
+        for p in range(4):
+            var = tk.IntVar(value=1 if portas_panico_config[p] else 0)
+            cb = tk.Checkbutton(frame_portas_p, text=f"P{p+1}", variable=var,
+                                bg="#2C2F44", fg="white", selectcolor="#4CAF50",
+                                activebackground="#2C2F44", activeforeground="white")
+            cb.pack(side="left", padx=2)
+            check_vars_p.append(var)
+
+        self.panicos[i] = {"entry": entry_p, "portas": check_vars_p}
+
+    # ===============================
+    # Novo bloco: PÂNICO GERAL
+    # ===============================
+    def criar_bloco_panico_geral(self):
+        frame_geral = tk.Frame(self, bg="#2C2F44", bd=2, relief="groove", padx=10, pady=10)
+        frame_geral.pack(padx=10, pady=10, fill="x")
+
+        tk.Label(frame_geral, text="PÂNICO GERAL", bg="#2C2F44", fg="white",
+                 font=("Arial", 14, "bold")).pack(anchor="w", pady=(0, 10))
+
+        self.panicos_geral = {}
+
+        for i in range(1, 9):
+            linha = tk.Frame(frame_geral, bg="#2C2F44")
+            linha.pack(anchor="w", pady=3, fill="x")
+
+            tk.Label(linha, text=f"IP Pânico {i}:", bg="#2C2F44", fg="white").pack(side="left", padx=5)
+            entry = tk.Entry(linha, width=15)
+            entry.insert(0, CONFIG["panicos"].get(str(i), ""))
+            entry.pack(side="left", padx=5)
+
+            tk.Label(linha, text="Portas Ativas:", bg="#2C2F44", fg="white").pack(side="left", padx=5)
+            check_vars = []
+            portas_cfg = CONFIG.get("portas_panico", {}).get(str(i), [True]*4)
+            for p in range(4):
+                var = tk.IntVar(value=1 if portas_cfg[p] else 0)
+                cb = tk.Checkbutton(linha, text=f"P{p+1}", variable=var,
+                                    bg="#2C2F44", fg="white", selectcolor="#4CAF50",
+                                    activebackground="#2C2F44", activeforeground="white")
+                cb.pack(side="left", padx=2)
+                check_vars.append(var)
+
+            self.panicos_geral[i] = {"entry": entry, "portas": check_vars}
+
+    # -------------------------------
+    # Funções internas
+    # -------------------------------
+    def testar_conexoes(self):
+        resultados = []
+        for i in range(1, 9):
+            ip_a = self.arduinos[i]["entry"].get().strip()
+            ip_p = self.panicos[i]["entry"].get().strip()
+            try:
+                r = requests.get(f"http://{ip_a}", timeout=1)
+                resultados.append(f"Arduino {i}: {'✅ OK' if r.status_code == 200 else f'⚠️ Erro {r.status_code}'}")
+            except Exception:
+                resultados.append(f"Arduino {i}: ❌ Falha")
+            try:
+                r = requests.get(f"http://{ip_p}", timeout=1)
+                resultados.append(f"Pânico {i}: {'✅ OK' if r.status_code == 200 else f'⚠️ Erro {r.status_code}'}")
+            except Exception:
+                resultados.append(f"Pânico {i}: ❌ Falha")
+
+        messagebox.showinfo("Teste de Conexões", "\n".join(resultados))
+
+    def salvar_tudo(self):
+        novas_config = {"arduinos": {}, "portas_arduino": {}, "panicos": {}, "portas_panico": {}}
+
+        # Arduino + Pânico
+        for i in range(1, 9):
+            novas_config["arduinos"][str(i)] = self.arduinos[i]["entry"].get().strip()
+            novas_config["portas_arduino"][str(i)] = [bool(var.get()) for var in self.arduinos[i]["portas"]]
+
+            novas_config["panicos"][str(i)] = self.panicos[i]["entry"].get().strip()
+            novas_config["portas_panico"][str(i)] = [bool(var.get()) for var in self.panicos[i]["portas"]]
+
+        # Pânico Geral
+        for i in range(1, 9):
+            novas_config["panicos"][str(i)] = self.panicos_geral[i]["entry"].get().strip()
+            novas_config["portas_panico"][str(i)] = [bool(var.get()) for var in self.panicos_geral[i]["portas"]]
+
+        salvar_config(novas_config)
+        messagebox.showinfo("Salvar", "Configurações salvas com sucesso!")
+
+#-----------------------------
+# Inicializa GUI
+#-----------------------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Sistema Vigilante")
+    root.geometry("1100x800")
+    tk.Button(root, text="Abrir Configurações", width=25,
+              command=lambda: ConfiguracoesGerais(root)).pack(pady=20)
+    root.mainloop()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    import json
+import requests
+from tkinter import messagebox
+
+def enviar_panico_geral(self):
+    """Ativa todos os pânicos gerais conforme configurado no config.json"""
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except Exception as e:
+        messagebox.showerror("Erro", f"Não foi possível ler config.json\n{e}")
+        return
+
+    panicos = config.get("panicos", {})
+    portas_panico = config.get("portas_panico", {})
+
+    resultados = []
+
+    for i in range(1, 9):
+        ip = panicos.get(str(i), "").strip()
+        if not ip:
+            resultados.append(f"Pânico {i}: ⚠️ Sem IP configurado")
+            continue
+
+        portas = portas_panico.get(str(i), [False, False, False, False])
+        for idx, ativo in enumerate(portas):
+            if ativo:
+                try:
+                    requests.get(f"http://{ip}/comando?portao={idx+1}", timeout=1)
+                    resultados.append(f"Pânico {i} Porta {idx+1}: ✅ Enviado")
+                except Exception as e:
+                    resultados.append(f"Pânico {i} Porta {idx+1}: ❌ Erro ({e})")
+
+    messagebox.showinfo("Pânico Geral", "\n".join(resultados))
+
+
+
+
+
+    # -------------------------------
+    # Funções internas
+    # -------------------------------
+    def testar_conexoes(self):
+        resultados = []
+        for i in range(1, 9):
+            ip_a = self.arduinos[i]["entry_ip"].get().strip()
+            ip_p = self.panicos[i]["entry_ip"].get().strip()
+            try:
+                r = requests.get(f"http://{ip_a}", timeout=1)
+                resultados.append(f"Arduino {i}: {'✅ OK' if r.status_code == 200 else f'⚠️ Erro {r.status_code}'}")
+            except Exception:
+                resultados.append(f"Arduino {i}: ❌ Falha")
+            try:
+                r = requests.get(f"http://{ip_p}", timeout=1)
+                resultados.append(f"Pânico {i}: {'✅ OK' if r.status_code == 200 else f'⚠️ Erro {r.status_code}'}")
+            except Exception:
+                resultados.append(f"Pânico {i}: ❌ Falha")
+
+        messagebox.showinfo("Teste de Conexões", "\n".join(resultados))
+
+    def salvar_tudo(self):
+        novas_config = {
+            "arduinos": {str(i): self.arduinos[i]["entry_ip"].get().strip() for i in range(1, 9)},
+            "portas_arduino": {str(i): [bool(var.get()) for var in self.arduinos[i]["portas"]] for i in range(1, 9)},
+            "panicos": {str(i): self.panicos[i]["entry_ip"].get().strip() for i in range(1, 9)},
+            "portas_panico": {str(i): [bool(var.get()) for var in self.panicos[i]["portas"]] for i in range(1, 9)}
+        }
+
+        # Inclui dados do bloco Pânico Geral
+        for i in range(1, 9):
+            novas_config["panicos"][str(i)] = self.entries_panico_geral[i].get().strip()
+            novas_config["portas_panico"][str(i)] = [bool(var.get()) for var in self.checks_portas_panico_geral[i]]
+
+        salvar_config(novas_config)
+        messagebox.showinfo("Salvar", "Configurações salvas com sucesso!")
+
+#-----------------------------
+# Inicializa GUI
+#-----------------------------
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.title("Sistema Vigilante")
+    root.geometry("1100x800")
+    tk.Button(root, text="Abrir Configurações", width=25,
+              command=lambda: ConfiguracoesGerais(root)).pack(pady=20)
+    root.mainloop()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ==============================
+# CAMERA VIEWER
+# ==============================
+class CameraViewer:
+    def __init__(self, janela, rtsp_url, display_size=(640,360), delay_ms=200):
+        self.janela = janela
+        self.url = rtsp_url
+        self.display_width, self.display_height = display_size
+        self.delay = delay_ms
+        self.label_video = tk.Label(self.janela, bg="black")
+        self.label_video.pack(fill=tk.BOTH, expand=True)
+        self.frame_queue = queue.Queue(maxsize=2)
+        self.running = True
+        self.connected = False
+        self.cap = None
+        threading.Thread(target=self._capture_loop, daemon=True).start()
+        self._update_display()
+        self.janela.protocol("WM_DELETE_WINDOW", self.fechar)
+
+    def _open_capture(self):
+        try:
+            if self.cap: self.cap.release()
+            self.cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG)
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.display_width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.display_height)
+        except Exception:
+            self.cap = None
+
+    def _capture_loop(self):
+        while self.running:
+            if not self.cap or not getattr(self.cap,"isOpened",lambda:False)():
+                self.connected = False
+                self._open_capture()
+                time.sleep(1)
+                continue
+            ret, frame = self.cap.read()
+            if ret and frame is not None:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.resize(frame, (self.display_width, self.display_height))
+                if self.frame_queue.full(): self.frame_queue.get_nowait()
+                self.frame_queue.put_nowait(frame)
+                self.connected = True
+            else:
+                self.connected = False
+                time.sleep(0.2)
+        if self.cap: self.cap.release()
+
+    def _placeholder_no_signal(self):
+        img = Image.new("RGB", (self.display_width, self.display_height), (0,0,0))
+        draw = ImageDraw.Draw(img)
+        draw.text((10,10),"SEM SINAL",(255,0,0))
+        return img
+
+    def _update_display(self):
+        if not self.running: return
+        try:
+            frame = None
+            while True:
+                try: frame = self.frame_queue.get_nowait()
+                except queue.Empty: break
+            img = Image.fromarray(frame) if frame is not None else self._placeholder_no_signal()
+        except Exception:
+            img = self._placeholder_no_signal()
+        imgtk = ImageTk.PhotoImage(img)
+        self.label_video.imgtk = imgtk
+        self.label_video.config(image=imgtk)
+        self.janela.after(self.delay, self._update_display)
+
+    def fechar(self):
+        self.running = False
+        if self.cap: self.cap.release()
+        try: self.janela.destroy()
+        except Exception: pass
+
+# ==============================
+# CLASSE PRINCIPAL DE PORTÕES
+# ==============================
+class TelaControlePortoes:
+    def __init__(self, master):
+        self.janela = master
+        self.janela.title("Controle de Portões")
+        self.janela.geometry("700x500")
+        self.janela.configure(bg="#282A36")
+        self.janela.resizable(False, False)
+
+        self.status_portoes = {i:"Fechado" for i in range(1,9)}
+        self.panico_ativo = False
+        self.arduino_ips = {i: CONFIG["arduinos"].get(str(i)) for i in range(1,9)}
+
+        # Aqui substituímos pelo seu código de IPs personalizados
+        ips = ["192.168.150.179", "192.168.150.178", "192.168.150.177",
+               "192.168.150.176", "192.168.150.112", "192.168.150.113",
+               "192.168.150.114", "192.168.150.115"]
+        self.urls_cameras = {i+1: f"rtsp://admin:condo.54@{ip}:554/" for i, ip in enumerate(ips)}
+
+        tk.Label(self.janela,text="Controle de 8 Portões",font=("Arial",16,"bold"),fg="white",bg="#282A36").pack(pady=10)
+        frame_botoes = tk.Frame(self.janela,bg="#282A36")
+        frame_botoes.pack(pady=20)
+
+        self.btns_portoes = {}
+        for i in range(1,9):
+            btn = tk.Button(frame_botoes,text=f"Portão {i}",width=14,height=2,bg="#FF9800",fg="white",
+                            font=("Arial",11,"bold"),command=lambda n=i:self.abrir_status_portao(n))
+            btn.grid(row=(i-1)//4,column=(i-1)%4,padx=10,pady=10)
+            aplicar_hover(btn,"#FF9800","#4CAF50")
+            self.btns_portoes[i] = btn
+
+
+        self.btn_panico = tk.Button(self.janela,text="Pânico Geral",width=15,height=2,bg="#FF0000",fg="white",
+                                    font=("Arial",12,"bold"),command=self.acionar_panico)
+        self.btn_panico.pack(pady=20)
+
+        barra_inferior = tk.Frame(self.janela,bg="#282A36")
+        barra_inferior.pack(side=tk.BOTTOM,fill=tk.X)
+        self.status_bar = tk.Label(barra_inferior,text=f"IP do computador: {pegar_ip_local()}",font=("Arial",10),fg="white",bg="#282A36")
+        self.status_bar.pack(side=tk.RIGHT,padx=10,pady=5)
+
+        self.btn_config = tk.Button(barra_inferior,text="Configuração",width=15,height=2,bg="#FF9800",fg="white",
+                                    font=("Arial",6),command=self.abrir_configuracoes)
+        self.btn_config.pack(side=tk.RIGHT,padx=10)
+
+    # ==============================
+    # FUNÇÃO DE PORTÕES
+    # ==============================
+    def enviar_comando_portao(self, numero_portao):
+     ip = self.arduino_ips.get(numero_portao)
+     try:
+        # Carrega a configuração mais recente
+        with open("config.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
+
+        # Verifica quais portas estão ativas para esse Arduino
+        portas_ativas = config.get("portas_arduino", {}).get(str(numero_portao), [True, True, True, True])
+
+        # Envia o comando apenas para as portas ativas
+        for i, ativa in enumerate(portas_ativas, start=1):
+            if ativa:
+                url = f"http://{ip}/comando?portao={numero_portao}&porta={i}"
+                r = requests.get(url, timeout=5)
+                if r.status_code != 200:
+                    raise Exception(f"Status {r.status_code} (porta {i})")
+
+        # Atualiza status na interface
+        self.status_portoes[numero_portao] = (
+            "Aberto" if self.status_portoes[numero_portao] == "Fechado" else "Fechado"
+        )
+        """self.atualizar_status_botao(numero_portao)"""
+
+     except Exception as e:
+        messagebox.showerror("Erro", f"Falha ao enviar comando para portão {numero_portao}: {e}")
+
+
+    # ==============================
+    # FUNÇÃO DE PÂNICO
+    # ==============================
+    def acionar_panico(self):
+        """Ativa o pânico geral de acordo com o config.json"""
+        if not self.panico_ativo:
+            self.panico_ativo = True
+            self.btn_panico.config(text="Cancelar Pânico", bg="#8B0000")
+            self.status_bar.config(text="⚠️ PÂNICO GERAL ATIVADO!", fg="yellow")
+            try:
+                with open("config.json", "r", encoding="utf-8") as f:
+                    config = json.load(f)
+            except Exception as e:
+                messagebox.showerror("Erro", f"Falha ao ler config.json: {e}")
+                return
+            panicos = config.get("panicos", {})
+            portas_panico = config.get("portas_panico", {})
+            resultados = []
+            for i in range(1, 9):
+                ip = panicos.get(str(i), "").strip()
+                if not ip:
+                    resultados.append(f"Pânico {i}: ⚠️ Sem IP configurado")
+                    continue
+                portas = portas_panico.get(str(i), [False, False, False, False])
+                for idx, ativo in enumerate(portas, start=1):
+                    if ativo:
+                        try:
+                            url = f"http://{ip}/comando?portao={idx}"
+                            r = requests.get(url, timeout=3)
+                            if r.status_code == 200:
+                                resultados.append(f"Pânico {i} Porta {idx}: ✅ Enviado")
+                            else:
+                                resultados.append(f"Pânico {i} Porta {idx}: ⚠️ Erro {r.status_code}")
+                        except Exception as e:
+                            resultados.append(f"Pânico {i} Porta {idx}: ❌ Falha ({e})")
+            messagebox.showinfo("Pânico Geral", "\n".join(resultados))
+            messagebox.showwarning("Pânico", "🚨 PÂNICO GERAL ATIVADO!")
+        else:
+            self.panico_ativo = False
+            self.btn_panico.config(text="Pânico Geral", bg="#FF0000")
+            self.status_bar.config(text=f"IP do computador: {pegar_ip_local()}", fg="white")
+            messagebox.showinfo("Pânico", "✅ Estado de pânico cancelado.")
+
+    # ==============================
+    # OUTRAS FUNÇÕES
+    # ==============================
+    def abrir_status_portao(self, numero_portao):
+        status = self.status_portoes[numero_portao]
+        ip_portao = self.arduino_ips[numero_portao]
+        janela = tk.Toplevel(self.janela)
+        janela.title(f"Portão {numero_portao}")
+        janela.geometry("450x200")
+        janela.configure(bg="#282A36")
+
+        tk.Label(janela,text=f"Portão {numero_portao} - Status: {status}",font=("Arial",14,"bold"),fg="white",bg="#282A36").pack(pady=15)
+        frame_buttons = tk.Frame(janela,bg="#282A36")
+        frame_buttons.pack(pady=20)
+
+        btn_abrir = tk.Button(frame_buttons, text="Abrir/Fechar", bg="#FF9800", fg="white",
+                      font=("Arial", 12, "bold"), width=12,
+                      command=lambda n=numero_portao: self.enviar_comando_portao(n))
+        btn_abrir.grid(row=0,column=0,padx=10)
+        tk.Button(frame_buttons,text="Ver Câmera",bg="#2196F3",fg="white",font=("Arial",12,"bold"),width=12,
+                  command=lambda:self.ver_camera(numero_portao)).grid(row=0,column=1,padx=10)
+        tk.Button(frame_buttons,text="OK",bg="#4CAF50",fg="white",font=("Arial",12,"bold"),width=12,
+                  command=janela.destroy).grid(row=0,column=2,padx=10)
+
+        barra_inf = tk.Frame(janela,bg="#C0C0C0")
+        barra_inf.pack(side=tk.BOTTOM,fill=tk.X)
+        tk.Label(barra_inf,text=f"IP do Portão: {ip_portao}",font=("Arial",10),bg="#C0C0C0").pack(side=tk.RIGHT,padx=10)
+
+    def ver_camera(self, numero_portao):
+        rtsp = self.urls_cameras.get(numero_portao)
+        if not rtsp:
+            messagebox.showerror("Erro","Câmera não configurada!")
+            return
+        nova_janela = tk.Toplevel(self.janela)
+        nova_janela.title(f"Câmera Portão {numero_portao}")
+        nova_janela.geometry("640x360")
+        CameraViewer(nova_janela,rtsp,display_size=(640,360),delay_ms=200)
+
+    def abrir_configuracoes(self):
+        ConfiguracoesGerais(self.janela)
+
+# ==============================
+# INICIALIZAÇÃO
+# ==============================
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = TelaControlePortoes(root)
+    root.mainloop()
